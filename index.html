@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>生日快乐</title>
+<style>
+html,body{margin:0;height:100%;background:#04040c;overflow:hidden;color:#fff;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+#c{position:fixed;inset:0;display:block;touch-action:none;cursor:grab}
+.b{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);color:#fff;padding:9px 16px;border-radius:20px;font-size:14px;cursor:pointer;backdrop-filter:blur(6px)}
+#start{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;background:rgba(4,4,12,.5)}
+#start .go{font-size:20px;padding:14px 40px}
+#start p{margin:0;color:#aab;font-size:13px;text-align:center;padding:0 24px}
+#ui{position:fixed;left:0;right:0;bottom:14px;display:none;gap:10px;justify-content:center;flex-wrap:wrap;z-index:5}
+#chap{position:fixed;left:18px;top:16px;z-index:5;pointer-events:none;max-width:70%}
+#chap small{display:block;font-size:11px;letter-spacing:.2em;color:#9aa8ff}
+#chap h1{margin:4px 0 0;font-size:clamp(20px,3vw,30px);font-weight:600}
+#hint{position:fixed;left:50%;bottom:62px;transform:translateX(-50%);z-index:5;max-width:88%;padding:10px 16px;border-radius:14px;background:rgba(20,18,40,.65);border:1px solid rgba(255,255,255,.15);font-size:13px;line-height:1.6;color:#cfd6ff;text-align:center;pointer-events:none;opacity:0;transition:opacity .6s}
+#wish{position:fixed;left:50%;top:13%;transform:translateX(-50%);width:90%;text-align:center;font-size:clamp(16px,2.6vw,28px);color:#ffe9b0;text-shadow:0 0 16px #ffb347;opacity:0;transition:opacity .8s;z-index:4;pointer-events:none}
+.fl{position:fixed;white-space:nowrap;color:#ffe9b0;text-shadow:0 0 8px #ff9;pointer-events:none;z-index:3;font-size:clamp(12px,1.6vw,18px)}
+#big{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:8}
+#big img{max-width:92%;max-height:88%;border-radius:14px;box-shadow:0 0 50px #8aa0ff66}
+#cam{position:fixed;left:12px;bottom:70px;width:130px;border-radius:10px;opacity:.6;transform:scaleX(-1);display:none;z-index:6}
+#dot{position:fixed;left:0;top:0;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:radial-gradient(#fff6c8,rgba(255,230,160,0));z-index:7;pointer-events:none;display:none}
+#msg{position:fixed;left:0;right:0;top:64px;text-align:center;font-size:13px;color:#9cf;z-index:6;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<video id="cam" playsinline muted></video>
+<div id="dot"></div>
+<div id="chap"><small id="c1"></small><h1 id="c2"></h1></div>
+<div id="msg"></div>
+<div id="wish"></div>
+<div id="hint"></div>
+<div id="big"><img id="bigimg"></div>
+<input id="file" type="file" accept="image/*" multiple hidden>
+<div id="start">
+  <button class="b go" id="go">点击开始</button>
+  <label class="b" for="file">先上传照片（可多选）</label>
+  <p>开场倒计时不可操作，之后粒子云里的照片可以用手或鼠标操控</p>
+</div>
+<div id="ui">
+  <label class="b" for="file">上传照片</label>
+  <button class="b" id="handbtn">开启手势</button>
+  <button class="b" id="replay">重新播放</button>
+</div>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+/* ===================== 在这里修改 ===================== */
+const NAME = "";            // ← 祝福对象的名字，填在引号里。也可以用网址参数：?name=名字
+const MAIN_TEXT = "生日快乐"; // 开场大字，可改成其他祝福（建议 4 个字以内）
+/* ====================================================== */
+
+const who = new URLSearchParams(location.search).get("name") || NAME || "寿星";
+const WISHES = ["生日快乐，天天开心","愿你每天醒来都有好心情","愿所有美好都向你奔来","新的一岁，万事胜意","愿你前程似锦，未来可期",
+"平安喜乐，岁岁无忧","愿你被世界温柔以待","心想事成，所愿皆所得","愿你眼里有光，心中有爱","今天你是全宇宙的主角",
+"愿你的每一天都闪闪发光","身体健康，笑口常开","学业顺利，金榜题名","愿你不负韶华，不负自己","所有烦恼都在今天清零",
+"愿你的努力都有回报","愿你一路繁花，步步生莲","吃嘛嘛香，睡嘛嘛甜","愿你永远少年，永远热泪盈眶","愿你有梦可追，有人陪伴",
+"这一岁，比上一岁更好","愿你天天好运，时时顺心","愿你的笑容永远灿烂","愿星光替我祝福你","愿你拥有想要的一切",
+"愿你自由自在，快乐无边","新岁快乐，万事顺意","愿你所遇皆良人","愿你梦想成真","愿你被爱包围",
+"愿你平安健康","愿你财源滚滚","愿你熬过低谷，拥抱光芒","愿你出走半生，归来仍是少年","愿你心中有山海",
+"愿你每一步都算数","愿你每个愿望都落地","愿你做自己的太阳","愿你好运常伴左右","愿你从容不迫，温柔坚定",
+"又长大一岁，依旧闪亮","愿你烦恼清零，快乐翻倍","愿你睡得安稳，醒得明朗","愿你每天都有小确幸","愿你的世界四季如春",
+"愿你一直被偏爱","愿你得偿所愿，如愿以偿","愿你勇敢无畏，无惧风雨","愿你笑得比星星还亮","愿你所行皆坦途",
+"愿时光待你不薄","愿你的未来比今天更亮","愿你想念的人都在身边","愿你平凡日子里也有惊喜","愿你拥有无限可能",
+"愿你不被辜负，不被打扰","愿你心有所属，目有所及","愿你熠熠生辉，光芒万丈","愿你岁月静好，现世安稳","愿你每一天都值得纪念",
+"愿你生活明朗，万物可爱","愿你永远热爱生活","愿你成为自己喜欢的样子","愿你的天赋被看见","愿你锦鲤附体，好运连连",
+"愿你所有考试都顺利通过","愿你口袋有钱，心里有光","愿你遇事有底气，遇人有温度","愿你想睡就睡，想玩就玩","愿你永远有人惦记",
+"愿你的故事温暖又精彩","愿你梦里全是糖","愿你每次回头都有人等","愿你被时间优待","愿你向阳而生",
+"愿你勇往直前，不负热爱","愿你四季平安，三餐温暖","愿你快乐无需理由","愿你生活处处是惊喜","愿你今夜好梦，明日晴朗",
+"愿你把日子过成诗","愿你笑口常开，好运自来","愿你成长路上繁星相伴","愿你拥有许多个明天","愿你健康快乐，万事如意",
+"愿你每天都像过生日","愿你永远有糖吃","愿你的心愿都有回响","愿你岁岁有今朝","愿所有的幸运都与你有关",
+"愿你的人生精彩绝伦","愿你平安顺遂，一生欢喜","愿你被好运环绕","愿你身边全是爱你的人","愿你一生被爱，一生自由",
+"愿你今天吃到最大的蛋糕","愿你的快乐永不打烊","愿你笑着迎接每一个明天","愿你不慌不忙，万事顺当","愿你所想皆所得，所愿皆所成"];
+
+const $ = id => document.getElementById(id);
+const rnd = (a,b) => a + Math.random()*(b-a);
+const clamp = (v,a,b) => Math.min(b,Math.max(a,v));
+
+/* ---------- three 基础 ---------- */
+const renderer = new THREE.WebGLRenderer({canvas:$("c"), antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x04040c);
+const camera = new THREE.PerspectiveCamera(55,1,.1,300);
+const cloud = new THREE.Group(); scene.add(cloud);
+let VW, VH;
+function resize(){
+  const w=innerWidth, h=innerHeight; renderer.setSize(w,h);
+  camera.aspect=w/h; const k=2*Math.tan(27.5*Math.PI/180);
+  const z=16*Math.max(1, 19/(k*16*camera.aspect));
+  camera.position.set(0,0,z); camera.updateProjectionMatrix();
+  VH=k*z; VW=VH*camera.aspect;
+}
+resize();
+
+/* 背景星 */
+{
+  const n=1800,a=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const r=rnd(60,120),t=rnd(0,6.283),p=Math.acos(rnd(-1,1));a[i*3]=r*Math.sin(p)*Math.cos(t);a[i*3+1]=r*Math.sin(p)*Math.sin(t);a[i*3+2]=r*Math.cos(p)}
+  const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.BufferAttribute(a,3));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x8899ff,size:.5,transparent:true,opacity:.55,depthWrite:false})));
+}
+
+/* ---------- 粒子 ---------- */
+const N = 36000;
+const pos=new Float32Array(N*3), vel=new Float32Array(N*3), tgt=new Float32Array(N*3), col=new Float32Array(N*3), ctg=new Float32Array(N*3), siz=new Float32Array(N);
+for(let i=0;i<N;i++){pos[i*3]=rnd(-25,25);pos[i*3+1]=rnd(-15,15);pos[i*3+2]=rnd(-25,10);siz[i]=rnd(.7,1.7);ctg[i*3]=ctg[i*3+1]=ctg[i*3+2]=.5}
+const geo=new THREE.BufferGeometry();
+geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+geo.setAttribute("aCol",new THREE.BufferAttribute(col,3));
+geo.setAttribute("aSize",new THREE.BufferAttribute(siz,1));
+const mat=new THREE.ShaderMaterial({
+  transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+  uniforms:{px:{value:renderer.getPixelRatio()}},
+  vertexShader:`attribute vec3 aCol;attribute float aSize;varying vec3 vC;uniform float px;
+  void main(){vC=aCol;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=clamp(aSize*px*55./-mv.z,1.,14.);gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`varying vec3 vC;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;gl_FragColor=vec4(vC,smoothstep(.5,.0,d)*.95);}`
+});
+const points=new THREE.Points(geo,mat); points.frustumCulled=false; points.renderOrder=2; cloud.add(points);
+
+/* 烟花 */
+const M=6000, sp=new Float32Array(M*3), sv=new Float32Array(M*3), sc=new Float32Array(M*3), sb=new Float32Array(M*3), sl=new Float32Array(M), ss=new Float32Array(M).fill(1.5);
+const sg=new THREE.BufferGeometry();
+sg.setAttribute("position",new THREE.BufferAttribute(sp,3));
+sg.setAttribute("aCol",new THREE.BufferAttribute(sc,3));
+sg.setAttribute("aSize",new THREE.BufferAttribute(ss,1));
+const sparkPts=new THREE.Points(sg,mat); sparkPts.frustumCulled=false; sparkPts.renderOrder=3; scene.add(sparkPts);
+
+/* ---------- 颜色 ---------- */
+const C_BLUE=[.48,.88,1],C_VIO=[.71,.61,1],C_WHT=[1,1,1],C_GOLD=[1,.83,.42],C_PINK=[1,.42,.62],C_ORG=[1,.64,.36];
+const mix=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+const grad=t=>{t=clamp(t,0,1);return t<.5?mix(C_BLUE,C_VIO,t*2):mix(C_VIO,C_WHT,(t-.5)*2)};
+function setT(i,x,y,z,c){const k=i*3;tgt[k]=x;tgt[k+1]=y;tgt[k+2]=z;ctg[k]=c[0];ctg[k+1]=c[1];ctg[k+2]=c[2]}
+
+/* ---------- 形状 ---------- */
+function textShape(lines,mode){
+  const asp=VW/VH,cw=900,ch=Math.round(900/asp);
+  const o=document.createElement("canvas");o.width=cw;o.height=ch;const c=o.getContext("2d");
+  const len=Math.max(...lines.map(l=>l.length));
+  const fs=Math.min(cw*.86/Math.max(len,1.2),ch*.5/lines.length,380);
+  c.font=`900 ${fs}px "PingFang SC","Microsoft YaHei",sans-serif`;c.textAlign="center";c.textBaseline="middle";c.fillStyle="#fff";
+  lines.forEach((l,i)=>c.fillText(l,cw/2,ch/2+(i-(lines.length-1)/2)*fs*1.1));
+  const d=c.getImageData(0,0,cw,ch).data,pts=[];
+  for(let y=0;y<ch;y+=2)for(let x=0;x<cw;x+=2)if(d[(y*cw+x)*4+3]>128)pts.push(x,y);
+  const n=pts.length/2; if(!n)return;
+  const ord=Array.from({length:n},(_,i)=>i);
+  for(let i=n-1;i>0;i--){const j=(Math.random()*(i+1))|0;[ord[i],ord[j]]=[ord[j],ord[i]]}
+  const s=VW/cw;
+  for(let i=0;i<N;i++){
+    const p=ord[i%n]*2,j=i>=n?1.2:0,x=pts[p]+rnd(-j,j),y=pts[p+1]+rnd(-j,j);
+    setT(i,(x-cw/2)*s,-(y-ch/2)*s,rnd(-.45,.45),mode==="gold"?mix(C_GOLD,C_PINK,Math.random()*.6):grad(x/cw+rnd(-.12,.12)));
+  }
+}
+function cakeShape(){
+  let i=0; const tilt=.4,ct=Math.cos(tilt),st=Math.sin(tilt);
+  const put=(x,y,z,c)=>{if(i<N)setT(i++,x*1.25,(y*ct-z*st)*1.25-1.2,(y*st+z*ct)*1.25,c)};
+  const cyl=(n,R,y0,h,cs)=>{for(let k=0;k<n;k++){
+    const r=Math.random(),a=rnd(0,6.283);let x,y,z;
+    if(r<.55){x=R*Math.cos(a);z=R*Math.sin(a);y=y0+rnd(0,h)}
+    else if(r<.8){const q=R*Math.sqrt(Math.random());x=q*Math.cos(a);z=q*Math.sin(a);y=y0+h}
+    else{const q=R*Math.sqrt(Math.random());x=q*Math.cos(a);z=q*Math.sin(a);y=y0+rnd(0,h)}
+    put(x,y,z,mix(cs[0],cs[1],Math.random()));}};
+  cyl(N*.12|0,4.2,-2.6,.35,[C_BLUE,C_WHT]);
+  cyl(N*.24|0,3.0,-2.25,1.7,[C_PINK,C_VIO]);
+  cyl(N*.19|0,2.2,-.55,1.5,[C_GOLD,C_ORG]);
+  cyl(N*.12|0,1.4,.95,1.3,[C_VIO,C_BLUE]);
+  cyl(N*.03|0,.12,2.25,1.5,[C_BLUE,C_WHT]);
+  for(let k=0,n=N*.02|0;k<n;k++){const a=rnd(0,6.283),b=rnd(-1,1),r=Math.sqrt(1-b*b)*Math.random();put(.28*r*Math.cos(a),4.05+.55*b,.28*r*Math.sin(a),mix(C_GOLD,C_ORG,Math.random()))}
+  while(i<N){const R=[5.2,6.1,7][(Math.random()*3)|0],a=rnd(0,6.283);put(R*Math.cos(a)+rnd(-.12,.12),-2.4+rnd(-.1,.1),R*Math.sin(a)+rnd(-.12,.12),grad(Math.random()))}
+}
+function cloudShape(){
+  for(let i=0;i<N;i++){
+    const r=7*Math.pow(Math.random(),.55),a=rnd(0,6.283),b=rnd(-1,1),q=Math.sqrt(1-b*b);
+    const t=Math.random(),c=t<.4?C_WHT:t<.7?C_BLUE:C_VIO,br=rnd(.45,1);
+    setT(i,r*q*Math.cos(a),r*b*.8,r*q*Math.sin(a),[c[0]*br,c[1]*br,c[2]*br]);
+  }
+}
+let current=null;
+function morph(fn){current=fn;fn()}
+function explode(){for(let k=0;k<N;k++){const a=rnd(0,6.283),b=rnd(-1,1),q=Math.sqrt(1-b*b),s=rnd(.15,.9);vel[k*3]+=q*Math.cos(a)*s;vel[k*3+1]+=b*s;vel[k*3+2]+=q*Math.sin(a)*s}}
+
+/* ---------- 烟花 ---------- */
+let sIdx=0;
+function burst(x,y,z,type){
+  const c=[C_GOLD,C_PINK,C_BLUE,C_VIO,C_WHT,C_ORG][(Math.random()*6)|0],n=130;
+  for(let i=0;i<n;i++){
+    const k=sIdx++%M,t=i/n*6.2832;let vx,vy,vz=rnd(-.03,.03);
+    if(type===0){vx=16*Math.sin(t)**3*.008;vy=(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))*.008}
+    else if(type===1){const r=(.6+.4*Math.cos(5*t))*.13;vx=Math.cos(t)*r;vy=Math.sin(t)*r}
+    else{const s=rnd(.03,.16),a=rnd(0,6.283),b=rnd(-1,1),q=Math.sqrt(1-b*b);vx=s*q*Math.cos(a);vy=s*q*Math.sin(a);vz=s*b}
+    sp[k*3]=x;sp[k*3+1]=y;sp[k*3+2]=z;sv[k*3]=vx;sv[k*3+1]=vy;sv[k*3+2]=vz;sb[k*3]=c[0];sb[k*3+1]=c[1];sb[k*3+2]=c[2];sl[k]=1;
+  }
+}
+function show(n){for(let i=0;i<n;i++)setTimeout(()=>burst(rnd(-VW*.35,VW*.35),rnd(-VH*.05,VH*.33),rnd(-3,3),i%3===0?0:(Math.random()*3)|0),i*380)}
+
+/* ---------- 照片卡片 ---------- */
+const photos=[], cards=[]; let cardOpacity=0, hover=null;
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function makeCard(it){
+  const cv=document.createElement("canvas");cv.width=cv.height=512;const c=cv.getContext("2d");
+  if(it.photo){
+    const im=it.photo.img;c.save();rr(c,10,10,492,492,46);c.clip();
+    const k=Math.max(512/im.width,512/im.height);c.drawImage(im,256-im.width*k/2,256-im.height*k/2,im.width*k,im.height*k);c.restore();
+  }else{
+    const gr=c.createLinearGradient(0,0,512,512);gr.addColorStop(0,"#2b2160");gr.addColorStop(1,"#6a3a8c");
+    rr(c,10,10,492,492,46);c.fillStyle=gr;c.fill();
+    c.fillStyle="#ffe9b0";c.textAlign="center";c.textBaseline="middle";c.font="700 30px sans-serif";c.fillText("✦",256,92);
+    c.font="700 46px 'PingFang SC','Microsoft YaHei',sans-serif";
+    const ls=it.wish.match(/.{1,7}/g)||[];ls.forEach((l,i)=>c.fillText(l,256,256+(i-(ls.length-1)/2)*64));
+  }
+  c.strokeStyle="rgba(200,212,255,.95)";c.lineWidth=10;rr(c,10,10,492,492,46);c.stroke();
+  const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;
+  return {t,src:it.photo?it.photo.url:cv.toDataURL()};
+}
+function buildCards(){
+  for(const c of cards){scene.remove(c);c.material.map.dispose();c.material.dispose();c.geometry.dispose()}
+  cards.length=0;
+  const items=photos.slice(0,14).map(p=>({photo:p}));
+  while(items.length<10)items.push({wish:WISHES[(Math.random()*WISHES.length)|0]});
+  for(let i=items.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[items[i],items[j]]=[items[j],items[i]]}
+  const n=items.length;
+  items.forEach((it,k)=>{
+    const {t,src}=makeCard(it);
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:t,transparent:true,opacity:0,alphaTest:.05,side:THREE.DoubleSide}));
+    const y=1-(k+.5)*2/n,rad=Math.sqrt(1-y*y),th=k*2.39996,r=rnd(2.4,5.2);
+    m.userData={base:new THREE.Vector3(Math.cos(th)*rad*r,y*r*.8,Math.sin(th)*rad*r),src};
+    m.renderOrder=1;m.scale.setScalar(.01);scene.add(m);cards.push(m);
+  });
+}
+$("file").addEventListener("change",e=>{
+  for(const f of e.target.files){const url=URL.createObjectURL(f),im=new Image();im.onload=()=>{photos.push({img:im,url});if(cardOpacity>0)buildCards()};im.src=url}
+  e.target.value="";
+});
+function updateCards(){
+  cloud.updateMatrixWorld();const s=cloud.scale.x;
+  for(const c of cards){
+    c.position.copy(c.userData.base).applyMatrix4(cloud.matrixWorld);
+    c.quaternion.copy(camera.quaternion);
+    const ts=2.1*s*(c===hover?1.2:1);c.scale.setScalar(c.scale.x+(ts-c.scale.x)*.15);
+    c.material.opacity+=(cardOpacity*.96-c.material.opacity)*.05;
+  }
+}
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+function pick(x,y){
+  if(cardOpacity<.5)return null;
+  ndc.set(x/innerWidth*2-1,-(y/innerHeight)*2+1);ray.setFromCamera(ndc,camera);
+  const h=ray.intersectObjects(cards,false);return h.length?h[0].object:null;
+}
+const bigOpen=()=>$("big").style.display==="flex";
+function openCard(c){$("bigimg").src=c.userData.src;$("big").style.display="flex"}
+function closeBig(){$("big").style.display="none"}
+$("big").onclick=closeBig;
+
+/* ---------- 交互：鼠标 / 触摸 ---------- */
+let ctl=false, zoom=1, ztgt=1, lastInput=0;
+const rot={x:.2,y:0,tx:.2,ty:0};
+const ptrs=new Map(); let down=null,pinchD=0;
+const pd=()=>{const a=[...ptrs.values()];return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1};
+const cvs=$("c");
+cvs.addEventListener("pointerdown",e=>{
+  cvs.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  down={x:e.clientX,y:e.clientY,t:performance.now(),moved:0};if(ptrs.size===2){pinchD=pd();down=null}
+});
+cvs.addEventListener("pointermove",e=>{
+  const p=ptrs.get(e.pointerId);
+  if(!p){if(ctl){hover=pick(e.clientX,e.clientY);cvs.style.cursor=hover?"pointer":"grab"}return}
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+  if(!ctl)return; lastInput=performance.now();
+  if(ptrs.size===1){rot.ty+=dx*.006;rot.tx=clamp(rot.tx+dy*.006,-1.3,1.3);if(down)down.moved+=Math.abs(dx)+Math.abs(dy)}
+  else if(ptrs.size===2){const d=pd();ztgt=clamp(ztgt*d/pinchD,.35,3.2);pinchD=d}
+});
+function up(e){
+  if(down&&ctl&&down.moved<8&&ptrs.size===1&&performance.now()-down.t<500){const c=pick(e.clientX,e.clientY);if(c)openCard(c)}
+  ptrs.delete(e.pointerId);if(ptrs.size<2)pinchD=0;down=null;
+}
+cvs.addEventListener("pointerup",up);cvs.addEventListener("pointercancel",up);
+cvs.addEventListener("wheel",e=>{if(!ctl)return;e.preventDefault();lastInput=performance.now();ztgt=clamp(ztgt*Math.exp(-e.deltaY*.0012),.35,3.2)},{passive:false});
+
+/* ---------- 手势 ---------- */
+let handOn=false,landmarker=null,lastT=-1,handData=[],prevPalm=null,prevD=0,wasPinch=false,lastPinch=0;
+const vid=$("cam"),dot=$("dot");
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+async function startHand(){
+  const btn=$("handbtn");btn.textContent="正在唤醒星空…";$("msg").textContent="首次加载模型需要几秒，请允许摄像头权限";
+  try{
+    const V="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+    const {HandLandmarker,FilesetResolver}=await import(V+"/+esm");
+    const fs=await FilesetResolver.forVisionTasks(V+"/wasm");
+    const model="https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+    try{landmarker=await HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:model,delegate:"GPU"},runningMode:"VIDEO",numHands:2})}
+    catch(e){landmarker=await HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:model},runningMode:"VIDEO",numHands:2})}
+    vid.srcObject=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:640,height:480},audio:false});
+    await vid.play();vid.style.display="block";handOn=true;btn.textContent="关闭手势";
+    $("msg").textContent="手势已开启";setTimeout(()=>$("msg").textContent="",3000);
+  }catch(e){
+    btn.textContent="开启手势";$("msg").textContent="手势开启失败，仍可用鼠标/触摸（需 HTTPS 和摄像头权限）";setTimeout(()=>$("msg").textContent="",6000);
+  }
+}
+function stopHand(){
+  handOn=false;handData=[];vid.style.display="none";dot.style.display="none";
+  if(vid.srcObject)vid.srcObject.getTracks().forEach(t=>t.stop());$("handbtn").textContent="开启手势";
+}
+function processHands(){
+  if(vid.readyState>=2&&vid.currentTime!==lastT){lastT=vid.currentTime;handData=landmarker.detectForVideo(vid,performance.now()).landmarks||[]}
+  const L=handData;
+  if(!L.length||!ctl&&!bigOpen()){dot.style.display="none";prevPalm=null;prevD=0;hover=ctl?null:hover;return}
+  const h=L[0],sx=(1-h[8].x)*innerWidth,sy=h[8].y*innerHeight;
+  dot.style.display="block";dot.style.transform=`translate(${sx}px,${sy}px)`;
+  const pinch=dist(h[4],h[8])/dist(h[0],h[9])<.32,now=performance.now();
+  hover=pick(sx,sy);
+  if(pinch&&!wasPinch&&now-lastPinch>800){lastPinch=now;if(bigOpen())closeBig();else if(hover)openCard(hover)}
+  wasPinch=pinch;
+  if(bigOpen()||pinch){prevPalm=null;prevD=0;return}
+  lastInput=now;
+  if(L.length>=2){
+    const d=Math.hypot(L[0][9].x-L[1][9].x,L[0][9].y-L[1][9].y);
+    if(prevD)ztgt=clamp(ztgt*Math.pow(d/prevD,2),.35,3.2);prevD=d;prevPalm=null;
+  }else{
+    prevD=0;
+    const o=[8,12,16,20].reduce((s,i)=>s+dist(h[i],h[0]),0)/4/dist(h[0],h[9]);
+    ztgt=.45+clamp((o-1.25)/.7,0,1)*1.95;
+    const px=1-h[9].x,py=h[9].y;
+    if(prevPalm){rot.ty+=(px-prevPalm.x)*6;rot.tx=clamp(rot.tx+(py-prevPalm.y)*4,-1.3,1.3)}
+    prevPalm={x:px,y:py};
+  }
+}
+$("handbtn").onclick=()=>handOn?stopHand():startHand();
+
+/* ---------- 祝福语 ---------- */
+let wishTimer=null,floatTimer=null;
+function startWishes(){
+  stopWishes();const el=$("wish");let last=-1;
+  const next=()=>{let i;do{i=(Math.random()*WISHES.length)|0}while(i===last);last=i;el.style.opacity=0;setTimeout(()=>{el.textContent=`祝 ${who}：${WISHES[i]}`;el.style.opacity=1},500)};
+  next();wishTimer=setInterval(next,4200);
+  floatTimer=setInterval(()=>{
+    const d=document.createElement("div");d.className="fl";d.textContent=WISHES[(Math.random()*WISHES.length)|0];
+    d.style.left=rnd(2,Math.max(10,innerWidth-200))+"px";d.style.top=innerHeight+"px";document.body.appendChild(d);
+    d.animate([{transform:"translateY(0)",opacity:0},{opacity:.85,offset:.15},{opacity:.85,offset:.8},{transform:`translateY(${-innerHeight*.9}px)`,opacity:0}],{duration:rnd(9000,13000)}).onfinish=()=>d.remove();
+  },2200);
+}
+function stopWishes(){clearInterval(wishTimer);clearInterval(floatTimer);$("wish").style.opacity=0;document.querySelectorAll(".fl").forEach(e=>e.remove())}
+
+/* ---------- 流程 ---------- */
+const chap=(a,b)=>{$("c1").textContent=a;$("c2").textContent=b};
+const hint=(t,ms)=>{const h=$("hint");if(!t){h.style.opacity=0;return}h.textContent=t;h.style.opacity=1;if(ms)setTimeout(()=>{if(h.textContent===t)h.style.opacity=0},ms)};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let runId=0;
+async function play(){
+  const id=++runId,alive=()=>id===runId;
+  ctl=false;ztgt=1;rot.tx=.2;rot.ty=0;cardOpacity=0;hover=null;closeBig();stopWishes();hint("");
+  chap("PROLOGUE · 序章","散落的星");
+  for(const n of ["4","3","2","1"]){morph(()=>textShape([n],"grad"));await sleep(1000);if(!alive())return}
+  chap("CHAPTER I","此刻，新的一岁");
+  morph(()=>textShape([MAIN_TEXT],"gold"));show(8);startWishes();
+  await sleep(7000);if(!alive())return;
+  chap("CHAPTER II","把愿望放进蛋糕");
+  morph(cakeShape);
+  await sleep(6000);if(!alive())return;
+  chap("CHAPTER III","星尘里的照片");
+  explode();morph(cloudShape);
+  await sleep(1800);if(!alive())return;
+  buildCards();cardOpacity=1;ctl=true;
+  hint("单手：移动旋转，张开/握拳缩放，拇指捏食指点开照片；双手拉开放大。鼠标：拖动、滚轮、点击。",16000);
+}
+$("replay").onclick=play;
+$("go").onclick=()=>{$("start").style.display="none";$("ui").style.display="flex";play()};
+$("c1").textContent="";
+morph(cloudShape);
+
+/* ---------- 主循环 ---------- */
+addEventListener("resize",()=>{resize();if(current&&current!==cloudShape&&current!==cakeShape)current()});
+function loop(){
+  requestAnimationFrame(loop);
+  if(handOn&&landmarker)processHands();
+  for(let k=0;k<N*3;k++){vel[k]+=(tgt[k]-pos[k])*.055;vel[k]*=.87;pos[k]+=vel[k];col[k]+=(ctg[k]-col[k])*.06}
+  geo.attributes.position.needsUpdate=true;geo.attributes.aCol.needsUpdate=true;
+  for(let k=0;k<M;k++){
+    if(sl[k]>0){sl[k]-=.011;sv[k*3+1]-=.0012;for(let j=0;j<3;j++){sv[k*3+j]*=.985;sp[k*3+j]+=sv[k*3+j]}}
+    const l=Math.max(sl[k],0);sc[k*3]=sb[k*3]*l;sc[k*3+1]=sb[k*3+1]*l;sc[k*3+2]=sb[k*3+2]*l;
+  }
+  sg.attributes.position.needsUpdate=true;sg.attributes.aCol.needsUpdate=true;
+  if(ctl){
+    if(performance.now()-lastInput>2500)rot.ty+=.0025;
+    zoom+=(ztgt-zoom)*.1;
+  }else{rot.ty+=(0-rot.ty)*.05;rot.tx+=(0-rot.tx)*.05;zoom+=(1-zoom)*.1}
+  if(!ctl&&current===cloudShape)rot.ty+=.003;
+  cloud.rotation.set(rot.tx,rot.ty,0);cloud.scale.setScalar(zoom);
+  updateCards();
+  renderer.render(scene,camera);
+}
+loop();
+</script>
+</body>
+</html>
